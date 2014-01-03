@@ -10,6 +10,15 @@ class globalValues(object):
     db_name="diboss"
 
     ipList=[]
+    internal_ipList=[]
+    ipdict={}
+
+    bind_rndc="/sbin/rndc"
+    bind_conf="/etc/rndc.conf"
+
+    dns_check_interval=300
+    web_check_interval=300
+    adjust_interval=3600
 
     def Config(self, configFile):
         cf = ConfigParser.ConfigParser()
@@ -22,6 +31,15 @@ class globalValues(object):
         self.db_name = cf.get("db", "db")
 
         self.ipList=cf.get("web","ip").split(",")
+        self.internal_ipList=cf.get("web", "internal-ip").split(",")
+        self.ipdict = dict(zip(self.ipList, self.internal_ipList))
+
+        self.bind_rndc=cf.get("bind", "rndc")
+        self.bind_conf=cf.get("bind", "conf")
+
+        self.dns_check_interval = cf.get("monitor", "dns-check-interval")
+        self.web_check_interval = cf.get("monitor", "web-check-interval")
+        self.adjust_interval = cf.get("monitor", "adjust-interval")
 
         return
 
@@ -36,6 +54,7 @@ def getConfig(configFile, gv):
     gv.db_name = cf.get("db", "db")
 
     gv.ipList=cf.get("web","ip").split(",")
+
 
     return
 

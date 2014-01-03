@@ -1,13 +1,16 @@
 __author__ = 'liuyang'
+# -*- coding: utf-8 -*-
 
 import getopt
-import sys
+import sys,time
+import threading
 
 import config
 import dnsInfo
 import dnsMonitor
 import httpMonitor
-
+import rsRndc
+import dnsAdjustment
 
 def usage():
     print "usage:[options]"
@@ -50,19 +53,49 @@ def main(argv):
     dnslist = mydns.getDnsList()
 
     ########################
-    # check dns state
+    # init checking dns state
     ########################
     dnsstats={}
     for dnsip in dnslist:
         dnsstats[dnsip] = [-1,[]]
+
+#    dnsthread = threading.Thread(target=dnsMonitor.dnsCheckRun,args=(dnsstats,))
+#    dnsthread.start()
+    #mrndc = rsRndc.rsRndc(rndc="/usr/local/sbin/rndc",conf="/Users/liuyang/rs/dns/rndc.conf")
+    mrndc = rsRndc.rsRndc(rndc=gv.bind_rndc, conf=gv.bind_conf)
+    dnsthread = dnsMonitor.dnsCheckThread(dnsstats, mrndc, gv.dns_check_interval)
+    dnsthread.start()
+
     #dnsMonitor.dnsCheckRun(dnsstats)
 
     ########################
-    # check http state
+    # init checking http state
     ########################
     mdict=dict.fromkeys(gv.ipList,-1)
-    httpMonitor.httpCheckerRun(mdict)
 
+#    httpthread=threading.Thread(target=httpMonitor.httpCheckerRun,args=(mdict,))
+#    httpthread.start()
+
+    httpthread = httpMonitor.httpCheckerThread(gv.ipdict, mdict, gv.web_check_interval)
+    httpthread.start()
+
+    dnsad = dnsAdjustment.dnsRsAdjustment(mrndc)
+    try:
+        while True:
+            print dnsstats
+            print mdict
+            #如果http中可用的服务器诶有了，就不要做任何调整了
+            httponlines,httpofflines = dnsad.dnsAdjustment(dnsstats,mdict)
+            if(len(httponlines)>0 and len(httpofflines)>0):
+                mydns.updatefactor(httponlines[0],httpofflines)
+
+            #需要调整数据库中的信息。
+
+            time.sleep(int(gv.adjust_interval))
+    except:
+        dnsthread.join()
+        httpthread.join()
+    #httpMonitor.httpCheckerRun(mdict)
 
 
 if __name__ == "__main__":

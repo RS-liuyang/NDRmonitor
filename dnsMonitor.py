@@ -3,9 +3,11 @@ __author__ = 'liuyang'
 
 import subprocess32,shlex
 import time
+import rsRndc
 
 def dnsCheckRun(dnsStatsDict):
-    mydnsChecker=dnsChecker(rndc="/usr/local/sbin/rndc",conf="/Users/liuyang/rs/dns/rndc.conf")
+    mrndc = rsRndc.rsRndc(rndc="/usr/local/sbin/rndc",conf="/Users/liuyang/rs/dns/rndc.conf")
+    mydnsChecker=dnsChecker(mrndc)
     mydnsChecker.setup(dnsStatsDict)
     while(True):
         mydnsChecker.check()
@@ -17,17 +19,9 @@ def dnsCheckRun(dnsStatsDict):
 class dnsChecker:
     #全局的dns状态信息，由外部传入
     dnsstats = {}
-    rndc = '/sbin/rndc'
-    conf = '/etc/rndc.conf'
-    timeout = 3
 
-    def __init__(self, **kwargs):
-        if kwargs.has_key('rndc'):
-            self.rndc = kwargs['rndc']
-        if kwargs.has_key('conf'):
-            self.conf = kwargs['conf']
-        if kwargs.has_key('timeout'):
-            self.timeout = kwargs['timeout']
+    def __init__(self, rsRndc):
+        self.rsrndc = rsRndc
 
 
     def setup(self, gdnsstats):
@@ -40,8 +34,7 @@ class dnsChecker:
         return
 
     def checkreply(self, dnsip):
-        cmd = self.rndc + " -c " + self.conf + " -s " + dnsip + " rsia_reply"
-        result = self.srun(cmd, self.timeout)
+        result = self.rsrndc.checkreply(dnsip)
         if(result[0] == 0):
             #得到dns上的ip转发列表
             self.dnsstats[dnsip][0]=1
@@ -53,22 +46,25 @@ class dnsChecker:
 
         return
 
+import threading
+class dnsCheckThread(threading.Thread):
+    def __init__(self, dnsStatsDict, rsRndc, ss=5):
+        self.dnsStatsDict = dnsStatsDict
+        self.ss = int(ss)
+        self.rsrndc = rsRndc
+        self.keepRunning = 1
+        threading.Thread.__init__(self)
 
-    def srun(self, cmd, otime):
-        try:
-            r = subprocess32.Popen(shlex.split(cmd),stdout=subprocess32.PIPE, stderr=subprocess32.PIPE)
-            stdout, stderr = r.communicate(timeout=otime)
-            ret = r.returncode
-            #print stdout
-            #print stderr
-            return [ret, stdout, stderr]
-        except subprocess32.TimeoutExpired:
-            r.kill()
-            stdout, stderr = r.communicate()
-            #print stdout
-            #print stderr
-            return [1, stdout, stderr]
+    def run(self):
+        mydnsChecker = dnsChecker(self.rsrndc)
+        mydnsChecker.setup(self.dnsStatsDict)
+        while(self.keepRunning):
+            mydnsChecker.check()
+            #print httpstatsdict
+            time.sleep(self.ss)
 
+    def stop(self):
+        self.keepRunning = 0;
 
 if __name__ == '__main__':
     dnsstats={}
